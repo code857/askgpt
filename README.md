@@ -1,8 +1,8 @@
 # AskGpt
 Linux command line based ChatGPT interface. Quick start
->export OPENAI_API_KEY="your secret"
->python3 askgpt.py
->~/bin/askgpt
+`$ export OPENAI_API_KEY="your secret`
+`$ python3 askgpt.py`
+`$ ~/bin/askgpt`
 
 ## AskGPT Tool Specification
 =====================================
