@@ -1,70 +1,73 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+'''
 # AskGPT Tool Specification (in English)
-# =====================================
-#
-# This script provides a command-line interface to interact with OpenAI's GPT models.
-# It supports session management, workspace configuration, model switching, and various
-# modes of interaction.
-#
-# Features:
-# - Session management
-#   - `-l`: List all sessions
-#   - `-c sessionname`: Create and switch to a new session
-#   - `-s sessionname`: Switch to an existing session
-#   - `-d sessionname`: Delete the specified session
-#   - `-d`: Display the current session's conversation in a custom format ([GPT]/[USER]) without system messages
-#   - `-n`: Show the current session name
-#   - `-a`: Show all messages of the current session in JSON
-#   - `-p`: Show the past history of the current session in JSON
-#
-# - Workspaces
-#   - `-w workspace_path`: Switch to a workspace, sessions are stored in workspace_path/.askgpt/sessions
-#   - `-wc`: Clear the workspace setting and revert to default (~/.askgpt/sessions)
-#   - `-wl`: List known workspaces, including the current one (if any) and the default.
-#
-# - Model management
-#   - `-m modelname`: Set the current session's model
-#   - `-ms modelname`: Set the global default model (stored in ~/.askgpt/model.conf)
-#   - `-mc`: Revert the global default model to `gpt-4o` and remove model.conf
-#
-# - Interactive mode
-#   - Run `askgpt` with no options to enter interactive mode.
-#   - Type questions and end input with the EOF word (default: "EOF").
-#   - If no queries have been asked yet in the current session, pressing enter on an empty line shows the conversation history in the `-d` format.
-#   - Once a query has been asked, empty line no longer shows history.
-#
-# - End-of-file word
-#   - `-e eofword`: Change the EOF word
-#
-# - File input
-#   - `-f filename`: Read the content of `filename` and send it as user message
-#
-# - If no current session exists, a `master_session` is automatically created and used.
-#
-# - Default model is `gpt-4o`.
-#
-#
-# Quick Installation:
-# ------------------
-# 1. Ensure you have Python installed and `openai` Python library (`pip install openai`).
-# 2. Run this script for the first time. If `~/bin/askgpt` doesn't exist,
-#    it will prompt you to install it. If you agree, it will install itself to `~/bin/askgpt`.
-# 3. Add `export PATH="$HOME/bin:$PATH"` to your `~/.bashrc` (or `~/.zshrc`, depending on your shell).
-#    For example:
-#       echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
-#    Then run:
-#       source ~/.bashrc
-#
-# After this, you can run `askgpt` from anywhere in your terminal.
-#
-# Dependencies:
-# - `openai` Python library
-# - `OPENAI_API_KEY` environment variable set with your API key.
-#
-"""
+ =====================================
 
+ This script provides a command-line interface to interact with OpenAI's GPT models.
+ It supports session management, workspace configuration, model switching, file input,
+ and various modes of interaction.
+
+ Features:
+ - Session management
+   - `-l`: List all sessions
+   - `-c sessionname`: Create and switch to a new session
+   - `-s sessionname`: Switch to an existing session
+   - `-d sessionname`: Delete the specified session
+   - `-d`: Display the current session's conversation in a custom format ([GPT]/[USER]) without system messages
+   - `-n`: Show the current session name
+   - `-a`: Show all messages of the current session in JSON
+   - `-p`: Show the past history of the current session in JSON
+
+ - Workspaces
+   - `-w workspace_path`: Switch to a workspace, sessions are stored in workspace_path/.askgpt/sessions
+   - `-wc`: Clear the workspace setting and revert to default (~/.askgpt/sessions)
+   - `-wl`: List known workspaces, including the current one (if any) and the default.
+
+ - Model management
+   - `-m modelname`: Set the current session's model
+   - `-ms modelname`: Set the global default model (stored in ~/.askgpt/model.conf)
+   - `-mc`: Revert the global default model to `gpt-4o` and remove model.conf
+
+ - Interactive mode
+   - Run `askgpt` with no options to enter interactive mode.
+   - Type questions and end input with the EOF word (default: "EOF").
+   - If no queries have been asked yet in the current session, pressing enter on an empty line shows the conversation history in the `-d` format.
+   - Once a query has been asked, empty line no longer shows history.
+
+ - End-of-file word
+   - `-e eofword`: Change the EOF word
+
+ - File input (`-f filename`)
+   - If `-f filename` is specified, the content of the file is used as a user message.
+   - After processing the file input, the script remains in interactive mode, accepting further standard input.
+   - If the first action is the user typing just the EOF word without any typed lines, and `-f` was specified, 
+     the file content is immediately sent as the user message and a response is obtained.
+   - If the first action is the user typing the EOF word with no `-f` given, the program exits (no input to send).
+   - After `-f` input is consumed and a response received, subsequent EOF with no user input means exit.
+
+ - If no current session exists, a `master_session` is automatically created and used.
+
+ - Default model is `gpt-4o`.
+
+
+ Quick Installation:
+ ------------------
+ 1. Ensure you have Python installed and `openai` Python library (`pip install openai`).
+ 2. Run this script for the first time. If `~/bin/askgpt` doesn't exist,
+    it will prompt you to install it. If you agree, it will install itself to `~/bin/askgpt`.
+ 3. Add `export PATH="$HOME/bin:$PATH"` to your `~/.bashrc` (or `~/.zshrc`, depending on your shell).
+    For example:
+       echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+    Then run:
+       source ~/.bashrc
+
+ After this, you can run `askgpt` from anywhere in your terminal.
+
+ Dependencies:
+ - `openai` Python library
+ - `OPENAI_API_KEY` environment variable set with your API key.
+'''
 import os
 import sys
 import json
@@ -214,7 +217,7 @@ Options:
   -p                 Show the past history of the current session in JSON.
   -h                 Show this help message.
   -e eofword         Change the EOF word to 'eofword'.
-  -f filename        Read the content of 'filename' and send it as user message.
+  -f filename        Read the content of 'filename' as a user message first, then stay interactive.
 
   -w workspace_path  Switch the workspace to 'workspace_path'
                      (sessions stored in workspace_path/.askgpt/sessions)
@@ -229,6 +232,11 @@ Without options:
   askgpt             Start interactive mode. Input your question. End with the EOF word (default: EOF).
                      If no queries asked yet, pressing enter on empty line shows the history (-d format).
                      Once you have entered queries, empty line no longer shows history.
+
+File input and EOF behavior:
+  - If `-f filename` is given, the file's content is used as the first user message if you hit EOF immediately.
+  - If no `-f` is given and you hit EOF immediately, the program exits.
+  - After processing `-f`, the program remains interactive. Hitting EOF with no new input lines afterwards exits.
 """
     print(help_msg.strip())
 
@@ -283,11 +291,12 @@ def query_gpt(data):
     )
     return response["choices"][0]["message"]["content"]
 
-def interactive_mode(eof_word):
+def interactive_mode(eof_word, initial_file_content=None):
     sessionname = ensure_current_session()
     data = load_session(sessionname)
 
     no_question_asked_yet = True
+    file_content_used = False  # To track if we've used -f content yet
 
     print(f"Current session: {sessionname}")
     print(f"Type your question and end input with '{eof_word}' on a single line.")
@@ -299,25 +308,51 @@ def interactive_mode(eof_word):
             try:
                 line = input()
             except EOFError:
-                return
+                # If EOF from terminal (Ctrl+D), treat as user typed EOF word
+                # No user input lines: if initial_file_content and not used, use it
+                # else exit.
+                if not file_content_used and initial_file_content is not None:
+                    # Use the file content
+                    user_lines = [initial_file_content]
+                    file_content_used = True
+                    break
+                else:
+                    # Exit
+                    return
+
             if line.strip() == "":
+                # empty line
                 if no_question_asked_yet:
                     # show history in -d format
                     display_current_session_custom_format(data["messages"])
                     return
                 else:
-                    # After queries, empty line does nothing
+                    # After queries, empty line does nothing, just prompt again
                     continue
+
             if line.strip() == eof_word:
+                # EOF word encountered
+                if len(user_lines) == 0:
+                    # No user input lines before EOF
+                    if not file_content_used and initial_file_content is not None:
+                        # Use file content now
+                        user_lines = [initial_file_content]
+                        file_content_used = True
+                    else:
+                        # No input and no file content pending
+                        # means exit
+                        return
                 break
             user_lines.append(line)
 
         if len(user_lines) == 0:
+            # No lines before EOF (other than handled above)
+            # This should be exit condition, but we handled above.
             continue
 
-        # Send to GPT
+        # We have user message (either from file content or typed lines)
         user_message = "\n".join(user_lines)
-        data["messages"].append({"role":"user", "content": user_message})
+        data["messages"].append({"role": "user", "content": user_message})
         assistant_reply = query_gpt(data)
         data["messages"].append({"role":"assistant", "content": assistant_reply})
         save_session(sessionname, data)
@@ -325,19 +360,17 @@ def interactive_mode(eof_word):
         no_question_asked_yet = False
 
 def file_input_mode(filename):
-    sessionname = ensure_current_session()
+    # Instead of immediately sending and exiting, we read the file content
+    # and pass it as initial_file_content to interactive_mode.
     if not Path(filename).exists():
         print(f"File not found: {filename}")
         sys.exit(1)
     with open(filename, "r", encoding="utf-8") as f:
         content = f.read()
 
-    data = load_session(sessionname)
-    data["messages"].append({"role": "user", "content": content})
-    assistant_reply = query_gpt(data)
-    data["messages"].append({"role": "assistant", "content": assistant_reply})
-    save_session(sessionname, data)
-    print(assistant_reply)
+    eof_word = load_eof_word()
+    # Start interactive mode with initial file content
+    interactive_mode(eof_word, initial_file_content=content)
 
 def set_model_for_current_session(modelname):
     sessionname = ensure_current_session()
@@ -379,7 +412,6 @@ def save_workspaces(lst):
         json.dump(lst, f, ensure_ascii=False, indent=2)
 
 def list_workspaces():
-    # show current, default, and known
     current_ws = get_workspace_path()
     known = load_workspaces()
     print("Workspaces:")
@@ -400,15 +432,12 @@ def list_workspaces():
         print("No other known workspaces.")
 
 def first_run_install_check():
-    # Check if ~/bin/askgpt exists
     if not INSTALL_PATH.exists():
         print("It seems this is the first time you are running askgpt.")
         ans = input(f"Would you like to install this script to {INSTALL_PATH}? (y/n): ")
         if ans.lower().startswith('y'):
-            # Ensure ~/bin exists
             if not INSTALL_PATH.parent.exists():
                 INSTALL_PATH.parent.mkdir(parents=True, exist_ok=True)
-            # Copy this script to ~/bin/askgpt
             script_path = Path(sys.argv[0]).resolve()
             shutil.copy(script_path, INSTALL_PATH)
             INSTALL_PATH.chmod(0o755)
@@ -421,13 +450,13 @@ def first_run_install_check():
 
 def main():
     ensure_directories()
-    first_run_install_check()  # Check installation on first run
+    first_run_install_check()
     eof_word = load_eof_word()
 
     args = sys.argv[1:]
 
     if len(args) == 0:
-        # interactive mode
+        # interactive mode without file input
         interactive_mode(eof_word)
         return
 
@@ -503,7 +532,6 @@ def main():
             print("Invalid option. See -h for help.")
             sys.exit(1)
 
-    # If reached here, invalid usage
     print("Invalid usage. See -h for help.")
     sys.exit(1)
 
