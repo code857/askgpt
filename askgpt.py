@@ -14,8 +14,7 @@
 #   - `-c sessionname`: Create and switch to a new session
 #   - `-s sessionname`: Switch to an existing session
 #   - `-d sessionname`: Delete the specified session
-#   - `-d` (no argument): Display the current session's conversation in a custom format
-#     ([GPT]/[USER]) without system messages.
+#   - `-d`: Display the current session's conversation in a custom format ([GPT]/[USER]) without system messages
 #   - `-n`: Show the current session name
 #   - `-a`: Show all messages of the current session in JSON
 #   - `-p`: Show the past history of the current session in JSON
@@ -23,39 +22,46 @@
 # - Workspaces
 #   - `-w workspace_path`: Switch to a workspace, sessions are stored in workspace_path/.askgpt/sessions
 #   - `-wc`: Clear the workspace setting and revert to default (~/.askgpt/sessions)
+#   - `-wl`: List known workspaces, including the current one (if any) and the default.
 #
 # - Model management
 #   - `-m modelname`: Set the current session's model
 #   - `-ms modelname`: Set the global default model (stored in ~/.askgpt/model.conf)
-#   - `-mc`: Clear the global default model, revert to "gpt-4o" and remove model.conf
+#   - `-mc`: Revert the global default model to `gpt-4o` and remove model.conf
 #
 # - Interactive mode
-#   - Run `askgpt` with no options: Enter interactive mode.
+#   - Run `askgpt` with no options to enter interactive mode.
 #   - Type questions and end input with the EOF word (default: "EOF").
-#   - If no input is given and just pressing enter BEFORE any user query in this session, it shows the conversation history in the same format as `-d`.
-#   - Once a user query has been entered and answered, pressing enter with no input no longer shows history.
+#   - If no queries have been asked yet in the current session, pressing enter on an empty line shows the conversation history in the `-d` format.
+#   - Once a query has been asked, empty line no longer shows history.
 #
 # - End-of-file word
 #   - `-e eofword`: Change the EOF word
 #
 # - File input
-#   - `-f filename`: Read the content of `filename` and send it as a user message
+#   - `-f filename`: Read the content of `filename` and send it as user message
 #
-# - Paths & Initialization
-#   - The script stores sessions in ~/.askgpt/sessions by default.
-#   - On first run, if ~/bin/askgpt does not exist, ask user to install it there.
-#     If user agrees, copy itself to ~/bin/askgpt and suggest to add `export PATH=$HOME/bin:$PATH`
-#     in their `.bashrc`.
+# - If no current session exists, a `master_session` is automatically created and used.
 #
-# - If no current session exists when needed, automatically create `master_session` and inform the user.
+# - Default model is `gpt-4o`.
 #
-# Default model is `gpt-4o`.
+#
+# Quick Installation:
+# ------------------
+# 1. Ensure you have Python installed and `openai` Python library (`pip install openai`).
+# 2. Run this script for the first time. If `~/bin/askgpt` doesn't exist,
+#    it will prompt you to install it. If you agree, it will install itself to `~/bin/askgpt`.
+# 3. Add `export PATH="$HOME/bin:$PATH"` to your `~/.bashrc` (or `~/.zshrc`, depending on your shell).
+#    For example:
+#       echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+#    Then run:
+#       source ~/.bashrc
+#
+# After this, you can run `askgpt` from anywhere in your terminal.
 #
 # Dependencies:
-# - Requires `openai` Python library and OPENAI_API_KEY environment variable.
-#
-# Usage:
-# see `askgpt -h`
+# - `openai` Python library
+# - `OPENAI_API_KEY` environment variable set with your API key.
 #
 """
 
@@ -74,6 +80,7 @@ WORKSPACE_CONF = ASKGPT_DIR / "workspace.conf"
 EOF_CONF = ASKGPT_DIR / "eof.conf"
 CURRENT_SESSION_FILE = ASKGPT_DIR / "current_session"
 INSTALL_PATH = HOME / "bin" / "askgpt"
+WORKSPACES_LIST = ASKGPT_DIR / "workspaces.json"
 
 DEFAULT_EOF = "EOF"
 
@@ -101,13 +108,12 @@ def get_current_session():
     return None
 
 def ensure_current_session():
-    # If there's no current session, create master_session
     sess = get_current_session()
     if sess is None:
         # create master_session
         master_name = "master_session"
         if not session_exists(master_name):
-            create_session_silent(master_name)  # silent creation
+            create_session_silent(master_name)
         set_current_session(master_name)
         print("No current session found. Created 'master_session' and switched to it.")
         return master_name
@@ -127,6 +133,7 @@ def get_workspace_path():
 def set_workspace_path(ws_path):
     with WORKSPACE_CONF.open("w", encoding="utf-8") as f:
         f.write(str(ws_path) + "\n")
+    register_workspace(ws_path)
 
 def clear_workspace():
     if WORKSPACE_CONF.exists():
@@ -157,7 +164,6 @@ def load_session(sessionname):
         with sf.open("r", encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, list):
-                # old format
                 data = {"model": get_default_model(), "messages": data}
             if "model" not in data:
                 data["model"] = get_default_model()
@@ -218,6 +224,7 @@ Options:
   -w workspace_path  Switch the workspace to 'workspace_path'
                      (sessions stored in workspace_path/.askgpt/sessions)
   -wc                Clear the workspace and revert to default (~/.askgpt/sessions)
+  -wl                List known workspaces, including current one.
 
   -m modelname       Change the model of the current session to 'modelname'.
   -ms modelname      Change the global default model to 'modelname' (saved in ~/.askgpt/model.conf).
@@ -225,9 +232,8 @@ Options:
 
 Without options:
   askgpt             Start interactive mode. Input your question. End with the EOF word (default: EOF).
-                     If you have not entered any query yet, pressing enter on empty line shows the history
-                     in the same format as '-d'. Once you have entered queries, empty line no longer shows history.
-
+                     If no queries asked yet, pressing enter on empty line shows the history (-d format).
+                     Once you have entered queries, empty line no longer shows history.
 """
     print(help_msg.strip())
 
@@ -259,7 +265,7 @@ def display_current_session_custom_format(messages):
         elif role == "user":
             print("[USER]")
             print(content.strip())
-        # skip system, to be added
+        # system is skipped
 
 def display_all_json(data):
     print(json.dumps(data, ensure_ascii=False, indent=2))
@@ -283,16 +289,14 @@ def query_gpt(data):
     return response["choices"][0]["message"]["content"]
 
 def interactive_mode(eof_word):
-    # Check current session, if none create master_session
     sessionname = ensure_current_session()
     data = load_session(sessionname)
 
-    # flag True if user send no query
     no_question_asked_yet = True
 
     print(f"Current session: {sessionname}")
     print(f"Type your question and end input with '{eof_word}' on a single line.")
-    print("If you have not entered any query yet, pressing enter on empty line shows the history in -d format.\n")
+    print("If no query asked yet, empty line shows history (-d format). After queries, empty line does nothing.\n")
 
     while True:
         user_lines = []
@@ -302,25 +306,21 @@ def interactive_mode(eof_word):
             except EOFError:
                 return
             if line.strip() == "":
-                # null line
                 if no_question_asked_yet:
-                    # no query show same as -d
+                    # show history in -d format
                     display_current_session_custom_format(data["messages"])
                     return
                 else:
-                    # after query, null line and no history
-                    # null line then do nothing and go next input
+                    # After queries, empty line does nothing
                     continue
             if line.strip() == eof_word:
-                # End of input for this question
                 break
             user_lines.append(line)
 
-        # If no input lines before EOF, just loop again
         if len(user_lines) == 0:
             continue
 
-        # ask user input to GPT
+        # Send to GPT
         user_message = "\n".join(user_lines)
         data["messages"].append({"role":"user", "content": user_message})
         assistant_reply = query_gpt(data)
@@ -365,6 +365,45 @@ def set_workspace(workspace_path):
     set_workspace_path(workspace_path)
     print(f"Workspace set to {workspace_path}")
 
+def register_workspace(ws_path):
+    # Keep track of known workspaces in workspaces.json
+    known = load_workspaces()
+    ws_str = str(ws_path)
+    if ws_str not in known:
+        known.append(ws_str)
+        save_workspaces(known)
+
+def load_workspaces():
+    if WORKSPACES_LIST.exists():
+        with WORKSPACES_LIST.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def save_workspaces(lst):
+    with WORKSPACES_LIST.open("w", encoding="utf-8") as f:
+        json.dump(lst, f, ensure_ascii=False, indent=2)
+
+def list_workspaces():
+    # show current, default, and known
+    current_ws = get_workspace_path()
+    known = load_workspaces()
+    print("Workspaces:")
+    if current_ws:
+        print(f"* Current workspace: {current_ws}")
+    else:
+        print("* Current workspace: (default)")
+
+    default_ws = ASKGPT_DIR / "sessions"
+    print(f"* Default workspace: {default_ws}")
+
+    if known:
+        print("Known workspaces:")
+        for ws in known:
+            mark = "(current)" if current_ws and str(current_ws) == ws else ""
+            print(f" - {ws} {mark}")
+    else:
+        print("No other known workspaces.")
+
 def first_run_install_check():
     # Check if ~/bin/askgpt exists
     if not INSTALL_PATH.exists():
@@ -404,7 +443,6 @@ def main():
         elif args[0] == "-n":
             sess = get_current_session()
             if sess is None:
-                # Create master_session if none
                 sess = ensure_current_session()
             print(sess)
             return
@@ -432,6 +470,9 @@ def main():
             return
         elif args[0] == "-mc":
             clear_global_default_model()
+            return
+        elif args[0] == "-wl":
+            list_workspaces()
             return
         else:
             print("Invalid option. See -h for help.")
