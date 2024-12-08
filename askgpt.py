@@ -358,7 +358,9 @@ def interactive_mode(eof_word, initial_file_content=None):
         save_session(sessionname, data)
         print(assistant_reply)
         no_question_asked_yet = False
-
+        if file_content_used is False and (initial_file_content is None or (initial_file_content is not None and user_message != initial_file_content)):
+            file_content_used = True
+        
 def file_input_mode(filename):
     # Instead of immediately sending and exiting, we read the file content
     # and pass it as initial_file_content to interactive_mode.
