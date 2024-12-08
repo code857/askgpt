@@ -1,5 +1,4 @@
-# AskGPT Tool Specification (in English)
- =====================================
+# AskGPT Tool Specification 
 
  This script provides a command-line interface to interact with OpenAI's GPT models.
  It supports session management, workspace configuration, model switching, file input,
