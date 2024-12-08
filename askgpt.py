@@ -183,12 +183,7 @@ def list_sessions():
 def create_session_silent(sessionname):
     data = {
         "model": get_default_model(),
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are a helpful assistant."
-            }
-        ]
+        "messages": []
     }
     save_session(sessionname, data)
 
